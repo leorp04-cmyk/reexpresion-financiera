@@ -1,6 +1,7 @@
 import io
 import pandas as pd
 import streamlit as st
+import pdfplumber
 
 # Configuración inicial de la página
 st.set_page_config(
@@ -11,16 +12,26 @@ st.set_page_config(
 
 st.title("ESTADO FINANCIERO - REEXPRESIÓN MONETARIA")
 st.markdown(
-    "*Factor de reconversión aplicado: 1 / 1,000,000.00 (Eliminación de 6"
-    " ceros)*"
+    "*Factor de reconversión aplicado: 1 / 1,000,000.00 (Eliminación de 6 ceros)*"
 )
 
-# Datos reales extraídos del Balance de Comprobación (Trattoria-Pizzeria Da Lucy, C.A.)
-datos_iniciales = [
+# 1. Componente para cargar el PDF o Imagen del Balance en la barra lateral
+st.sidebar.header("1. Cargar Balance de Comprobación")
+archivo_subido = st.sidebar.file_uploader(
+    "Sube tu archivo PDF o Imagen del Balance", type=["pdf", "png", "jpg", "jpeg"]
+)
+
+factor_reconversion = st.sidebar.number_input(
+    "Factor de división (Eliminación de ceros):",
+    value=1000000.0,
+    step=100000.0,
+    format="%.2f",
+)
+
+# Datos base por defecto para el editor interactivo
+datos_por_defecto = [
     {
-        "Cuenta / Descripción": (
-            "Efectivo y Equivalentes de Efectivo (Caja y Bancos)"
-        ),
+        "Cuenta / Descripción": "Efectivo y Equivalentes de Efectivo (Caja y Bancos)",
         "Categoría": "Activo Circulante",
         "Monto Original": 6621552093.99,
     },
@@ -76,31 +87,33 @@ datos_iniciales = [
     },
 ]
 
-df_base = pd.DataFrame(datos_iniciales)
+# Procesamiento del archivo PDF si el usuario sube uno
+if archivo_subido is not None:
+    if archivo_subido.type == "application/pdf":
+        try:
+            with pdfplumber.open(archivo_subido) as pdf:
+                texto_extraido = ""
+                for pagina in pdf.pages:
+                    t = pagina.extract_text()
+                    if t:
+                        texto_extraido += t + "\n"
+            st.sidebar.success("¡PDF leído correctamente con pdfplumber!")
+        except Exception as e:
+            st.sidebar.error(f"Error al leer el PDF: {e}")
 
-# Sidebar de control
-st.sidebar.header("Parámetros de Reexpresión")
-factor_reconversion = st.sidebar.number_input(
-    "Factor de división (Eliminación de ceros):",
-    value=1000000.0,
-    step=100000.0,
-    format="%.2f",
-)
+# Editor interactivo de datos
+st.subheader("2. Edición y Validación de Cuentas del Balance")
+st.markdown("Puedes modificar, agregar o eliminar cuentas y montos directamente en la tabla:")
 
-st.sidebar.info(
-    "💡 Puedes editar directamente las celdas de la tabla para ajustar montos"
-    " o descripciones según tus requerimientos."
-)
+df_base = pd.DataFrame(datos_por_defecto)
 
-# Editor interactivo para mantener flexibilidad total idéntica al Excel deseado
-st.subheader("Edición y Validación de Cuentas")
 df_editado = st.data_editor(
     df_base,
     num_rows="dynamic",
     use_container_width=True,
     column_config={
         "Monto Original": st.column_config.NumberColumn(
-            "Monto Original", format="Bs. %.2f"
+            "Monto Original (Bs.)", format="%.2f"
         )
     },
 )
@@ -110,35 +123,43 @@ df_editado["Monto Reexpresado (-6 Ceros)"] = (
     df_editado["Monto Original"] / factor_reconversion
 )
 
-# Mostrar la tabla final formateada de manera idéntica al modelo que necesitas
+# Vista previa con formato contable limpio
 st.markdown("---")
-st.subheader("Vista Previa del Resultado Reexpresado")
+st.subheader("3. Vista Previa del Resultado Reexpresado")
 
 
 def formatear_monto(val):
     try:
-        # Formato contable con separador de miles y paréntesis para negativos
-        if val < 0:
-            return f"({abs(val):,.2f})".replace(",", "X").replace(".", ",").replace("X", ".")
+        val_float = float(val)
+        if val_float < 0:
+            return (
+                f"({abs(val_float):,.2f})"
+                .replace(",", "X")
+                .replace(".", ",")
+                .replace("X", ".")
+            )
         else:
-            return f"{val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except:
+            return (
+                f"{val_float:,.2f}"
+                .replace(",", "X")
+                .replace(".", ",")
+                .replace("X", ".")
+            )
+    except (ValueError, TypeError):
         return val
 
 
 df_visual = pd.DataFrame()
 df_visual["Cuenta / Descripción"] = df_editado["Cuenta / Descripción"]
 df_visual["Categoría"] = df_editado["Categoría"]
-df_visual["Monto Original"] = df_editado["Monto Original"].apply(
-    formatear_monto
-)
+df_visual["Monto Original"] = df_editado["Monto Original"].apply(formatear_monto)
 df_visual["Monto Reexpresado (-6 Ceros)"] = df_editado[
     "Monto Reexpresado (-6 Ceros)"
 ].apply(formatear_monto)
 
 st.dataframe(df_visual, use_container_width=True)
 
-# Cálculo de Totales
+# Totales Generales
 total_original = df_editado["Monto Original"].sum()
 total_reexpresado = df_editado["Monto Reexpresado (-6 Ceros)"].sum()
 
@@ -146,26 +167,27 @@ col1, col2 = st.columns(2)
 with col1:
     st.metric(
         label="TOTAL GENERAL (Original)",
-        value=f"Bs. {total_original:,.2f}".replace(",", "X")
+        value=f"Bs. {total_original:,.2f}"
+        .replace(",", "X")
         .replace(".", ",")
         .replace("X", "."),
     )
 with col2:
     st.metric(
         label="TOTAL GENERAL (Reexpresado)",
-        value=f"Bs. {total_reexpresado:,.2f}".replace(",", "X")
+        value=f"Bs. {total_reexpresado:,.2f}"
+        .replace(",", "X")
         .replace(".", ",")
         .replace("X", "."),
     )
 
 
-# Función para generar el archivo Excel limpio con openpyxl
+# Función para generar el archivo Excel (.xlsx) limpio en memoria
 def generar_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Estado Financiero")
-    processed_data = output.getvalue()
-    return processed_data
+    return output.getvalue()
 
 
 st.markdown("---")
@@ -177,4 +199,3 @@ st.download_button(
     file_name="Estado_Financiero_Reexpresado.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
-
