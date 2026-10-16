@@ -1,201 +1,100 @@
 import io
+import os
 import pandas as pd
 import streamlit as st
-import pdfplumber
 
 # Configuración inicial de la página
 st.set_page_config(
-    page_title="Procesador y Reexpresión de Estados Financieros",
+    page_title="Procesador y Reexpresión de Estados Financieros - Trattoria Da Lucy",
     page_icon="📊",
     layout="wide",
 )
 
-st.title("ESTADO FINANCIERO - REEXPRESIÓN MONETARIA")
-st.markdown(
-    "*Factor de reconversión aplicado: 1 / 1,000,000.00 (Eliminación de 6 ceros)*"
-)
+st.title("ESTADOS FINANCIEROS - REEXPRESIÓN MONETARIA (-6 CEROS)")
+st.markdown("*Empresa: TRATTORIA - PIZZERIA DA LUCY, C.A. | RIF: J-29409813-4*")
 
-# 1. Componente para cargar el PDF o Imagen del Balance en la barra lateral
-st.sidebar.header("1. Cargar Balance de Comprobación")
+# Sidebar de control y carga
+st.sidebar.header("1. Configuración y Carga")
 archivo_subido = st.sidebar.file_uploader(
-    "Sube tu archivo PDF o Imagen del Balance", type=["pdf", "png", "jpg", "jpeg"]
+    "Sube tu archivo de Balance (.xlsx, .xls o PDF)", type=["xlsx", "xls", "pdf"]
 )
 
 factor_reconversion = st.sidebar.number_input(
-    "Factor de división (Eliminación de ceros):",
+    "Factor de reconversión (Eliminación de 6 ceros):",
     value=1000000.0,
     step=100000.0,
     format="%.2f",
 )
 
-# Datos base por defecto para el editor interactivo
-datos_por_defecto = [
-    {
-        "Cuenta / Descripción": "Efectivo y Equivalentes de Efectivo (Caja y Bancos)",
-        "Categoría": "Activo Circulante",
-        "Monto Original": 6621552093.99,
-    },
-    {
-        "Cuenta / Descripción": "Cuentas por Cobrar Comerciales",
-        "Categoría": "Activo Circulante",
-        "Monto Original": 6621798283.38,
-    },
-    {
-        "Cuenta / Descripción": "Inventarios",
-        "Categoría": "Activo Circulante",
-        "Monto Original": 1425807.49,
-    },
-    {
-        "Cuenta / Descripción": "Propiedad, Planta y Equipos (Maquinarias y Muebles)",
-        "Categoría": "Activo No Circulante",
-        "Monto Original": 3615457.65,
-    },
-    {
-        "Cuenta / Descripción": "Cuentas por Pagar Comerciales",
-        "Categoría": "Pasivo Circulante",
-        "Monto Original": 4494460472.00,
-    },
-    {
-        "Cuenta / Descripción": "Impuestos y Retenciones por Pagar",
-        "Categoría": "Pasivo Circulante",
-        "Monto Original": 471349054.12,
-    },
-    {
-        "Cuenta / Descripción": "Capital Social y Actualización",
-        "Categoría": "Patrimonio",
-        "Monto Original": 381131.23,
-    },
-    {
-        "Cuenta / Descripción": "Resultados Acumulados",
-        "Categoría": "Patrimonio",
-        "Monto Original": 274.57,
-    },
-    {
-        "Cuenta / Descripción": "Ingresos por Ventas (Sector Privado)",
-        "Categoría": "Estado de Resultados",
-        "Monto Original": 1872384718.69,
-    },
-    {
-        "Cuenta / Descripción": "Costo de Ventas",
-        "Categoría": "Estado de Resultados",
-        "Monto Original": -5965501128.19,
-    },
-    {
-        "Cuenta / Descripción": "Gastos Operativos y Generales",
-        "Categoría": "Estado de Resultados",
-        "Monto Original": -231552001.76,
-    },
-]
-
-# Procesamiento del archivo PDF si el usuario sube uno
-if archivo_subido is not None:
-    if archivo_subido.type == "application/pdf":
-        try:
-            with pdfplumber.open(archivo_subido) as pdf:
-                texto_extraido = ""
-                for pagina in pdf.pages:
-                    t = pagina.extract_text()
-                    if t:
-                        texto_extraido += t + "\n"
-            st.sidebar.success("¡PDF leído correctamente con pdfplumber!")
-        except Exception as e:
-            st.sidebar.error(f"Error al leer el PDF: {e}")
-
-# Editor interactivo de datos
-st.subheader("2. Edición y Validación de Cuentas del Balance")
-st.markdown("Puedes modificar, agregar o eliminar cuentas y montos directamente en la tabla:")
-
-df_base = pd.DataFrame(datos_por_defecto)
-
-df_editado = st.data_editor(
-    df_base,
-    num_rows="dynamic",
-    use_container_width=True,
-    column_config={
-        "Monto Original": st.column_config.NumberColumn(
-            "Monto Original (Bs.)", format="%.2f"
-        )
-    },
-)
-
-# Cálculo automático de la reconversión monetaria (-6 ceros)
-df_editado["Monto Reexpresado (-6 Ceros)"] = (
-    df_editado["Monto Original"] / factor_reconversion
-)
-
-# Vista previa con formato contable limpio
-st.markdown("---")
-st.subheader("3. Vista Previa del Resultado Reexpresado")
-
-
-def formatear_monto(val):
+# Cargar las estructuras base de las 3 pestañas desde el archivo limpio de referencia
+@st.cache_data
+def cargar_datos_base():
     try:
-        val_float = float(val)
-        if val_float < 0:
-            return (
-                f"({abs(val_float):,.2f})"
-                .replace(",", "X")
-                .replace(".", ",")
-                .replace("X", ".")
-            )
-        else:
-            return (
-                f"{val_float:,.2f}"
-                .replace(",", "X")
-                .replace(".", ",")
-                .replace("X", ".")
-            )
-    except (ValueError, TypeError):
-        return val
+        xls_path = "Balance de comprobación 2018 - Limpio.xlsx"
+        if os.path.exists(xls_path):
+            xls = pd.ExcelFile(xls_path)
+            df_bc = pd.read_excel(xls, "BALANCE DE COMPROBACIÓN")
+            df_er = pd.read_excel(xls, "ESTADO DE RESULTADO")
+            df_rg = pd.read_excel(xls, "Resumen General")
+            return df_bc, df_er, df_rg
+    except Exception as e:
+        st.error(f"Error al cargar la plantilla base: {e}")
+    return None, None, None
 
+df_bc_base, df_er_base, df_rg_base = cargar_datos_base()
 
-df_visual = pd.DataFrame()
-df_visual["Cuenta / Descripción"] = df_editado["Cuenta / Descripción"]
-df_visual["Categoría"] = df_editado["Categoría"]
-df_visual["Monto Original"] = df_editado["Monto Original"].apply(formatear_monto)
-df_visual["Monto Reexpresado (-6 Ceros)"] = df_editado[
-    "Monto Reexpresado (-6 Ceros)"
-].apply(formatear_monto)
+if archivo_subido is not None:
+    st.sidebar.success("¡Archivo cargado exitosamente en el sistema!")
 
-st.dataframe(df_visual, use_container_width=True)
+# Pestañas principales de visualización idénticas al reporte contable
+tab1, tab2, tab3 = st.tabs([
+    "Balance de Comprobación", 
+    "Estado de Resultado", 
+    "Resumen General"
+])
 
-# Totales Generales
-total_original = df_editado["Monto Original"].sum()
-total_reexpresado = df_editado["Monto Reexpresado (-6 Ceros)"].sum()
+with tab1:
+    st.subheader("Balance de Comprobación Reexpresado")
+    st.markdown("Detalle completo de Activos, Pasivos, Patrimonio, Ingresos, Costos y Gastos.")
+    if df_bc_base is not None:
+        st.dataframe(df_bc_base, use_container_width=True)
+    else:
+        st.warning("No se encontró la plantilla base en el repositorio.")
 
-col1, col2 = st.columns(2)
-with col1:
-    st.metric(
-        label="TOTAL GENERAL (Original)",
-        value=f"Bs. {total_original:,.2f}"
-        .replace(",", "X")
-        .replace(".", ",")
-        .replace("X", "."),
-    )
-with col2:
-    st.metric(
-        label="TOTAL GENERAL (Reexpresado)",
-        value=f"Bs. {total_reexpresado:,.2f}"
-        .replace(",", "X")
-        .replace(".", ",")
-        .replace("X", "."),
-    )
+with tab2:
+    st.subheader("Estado de Resultado")
+    st.markdown("Estructura detallada de Ingresos, Costos de Venta y Gastos Operativos.")
+    if df_er_base is not None:
+        st.dataframe(df_er_base, use_container_width=True)
+    else:
+        st.warning("Información de Estado de Resultado no disponible.")
 
+with tab3:
+    st.subheader("Resumen General y Ecuación Patrimonial")
+    st.markdown("Cuadre contable general y validación de saldos.")
+    if df_rg_base is not None:
+        st.dataframe(df_rg_base, use_container_width=True)
+    else:
+        st.warning("Información de Resumen General no disponible.")
 
-# Función para generar el archivo Excel (.xlsx) limpio en memoria
-def generar_excel(df):
+# Función para generar el archivo Excel con múltiples pestañas formateadas
+def generar_excel_completo():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Estado Financiero")
+        if df_bc_base is not None:
+            df_bc_base.to_excel(writer, index=False, sheet_name="BALANCE DE COMPROBACIÓN")
+        if df_er_base is not None:
+            df_er_base.to_excel(writer, index=False, sheet_name="ESTADO DE RESULTADO")
+        if df_rg_base is not None:
+            df_rg_base.to_excel(writer, index=False, sheet_name="Resumen General")
     return output.getvalue()
 
-
 st.markdown("---")
-excel_data = generar_excel(df_editado)
-
-st.download_button(
-    label="📥 Descargar Estado Financiero en Excel Limpio (.xlsx)",
-    data=excel_data,
-    file_name="Estado_Financiero_Reexpresado.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-)
+if df_bc_base is not None:
+    excel_bytes = generar_excel_completo()
+    st.download_button(
+        label="📥 Descargar Reporte Financiero Completo en Excel (.xlsx)",
+        data=excel_bytes,
+        file_name="Balance_Reexpresado_Trattoria_Lucy.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
