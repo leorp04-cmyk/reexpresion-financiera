@@ -108,7 +108,7 @@ def extraer_datos_con_gemini(pdf_bytes, api_key):
                 }
             })
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={api_key}""
         
         prompt_text = """
         Eres un contador público colegiado y auditor. Analiza todas las páginas escaneadas del Balance de Comprobación adjunto.
